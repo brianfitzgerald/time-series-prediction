@@ -1,0 +1,6 @@
+tensorboard
+torch-tb-profiler
+torch==2.0.1
+scikit-learn
+pandas
+fire
