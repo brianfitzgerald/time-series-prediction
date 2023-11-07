@@ -11,6 +11,7 @@ from typing import Optional, Tuple
 from torch.utils.data import TensorDataset, DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 from sklearn.preprocessing import MinMaxScaler
+from metrics import write_all_metrics
 from model import RNNModel, LSTMModel, GRUModel, get_available_device, TimeSeriesModel
 from enum import Enum
 
@@ -98,13 +99,13 @@ def model_step(
     device: torch.device,
     criterion: nn.Module,
     batch_size: int,
-):
+) -> Tuple[Tensor, Tensor, Tensor]:
     model.reset_hidden(batch_size)
     data = data.to(device)
     labels = labels.squeeze(-1).to(device)
     output = model(data)
     loss = criterion(output, labels)
-    return loss
+    return loss, output, labels
 
 
 def main(dataset: str = "price_vol"):
@@ -163,25 +164,26 @@ def main(dataset: str = "price_vol"):
     global_step = 0
 
     for i in range(n_epochs):
-        for j, (data, labels) in enumerate(train_loader):
-            optimizer.zero_grad()
-            loss = model_step(model, data, labels, device, criterion, batch_size)
-            loss.backward()
-            optimizer.step()
-            writer.add_scalar("train/loss", loss.item(), global_step)
-            global_step += 1
-
-            print(f"Train: epoch {i:03.0f}, batch {j:03.0f}, loss {loss.item():10.8f}")
-
         for j, (data, labels) in enumerate(test_loader):
             with torch.no_grad():
-                loss = model_step(model, data, labels, device, criterion, batch_size)
+                loss, output, labels = model_step(model, data, labels, device, criterion, batch_size)
+                write_all_metrics(output, labels, writer, i)
                 writer.add_scalar("test/loss", loss.item(), global_step)
                 global_step += 1
 
                 print(
                     f"Test: epoch {i:03.0f}, batch {j:03.0f}, loss {loss.item():10.8f}"
                 )
+
+        for j, (data, labels) in enumerate(train_loader):
+            optimizer.zero_grad()
+            loss, output, labels = model_step(model, data, labels, device, criterion, batch_size)
+            loss.backward()
+            optimizer.step()
+            writer.add_scalar("train/loss", loss.item(), global_step)
+            global_step += 1
+
+            print(f"Train: epoch {i:03.0f}, batch {j:03.0f}, loss {loss.item():10.8f}")
 
 
 if __name__ == "__main__":
